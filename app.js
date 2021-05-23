@@ -3,13 +3,20 @@ const app = express();
 const db = require('./db');
 const user = require('./controllers/usercontroller');
 const game = require('./controllers/gamecontroller')
+const {json} = require('body-parser');
+require('dotenv').config();
 
+const start = async () => {
+  await db.sync();
+  app.listen(process.env.PORT, function () {
+    console.log("App is listening on", process.env.PORT)
+  })
+}
 
-db.sync();
-app.use(require('body-parser'));
+app.use(json());
 app.use('/api/auth', user);
 app.use(require('./middleware/validate-session'))
 app.use('/api/game', game);
-app.listen(function() {
-    console.log("App is listening on 4000");
-})
+
+start();
+
