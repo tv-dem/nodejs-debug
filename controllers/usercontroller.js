@@ -1,51 +1,57 @@
-var router = Router();
-var bcrypt = require('bcrypt');
-var jwt = require('jsonwebtoken');
+const router = require('express').Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
-var User = require('../db').import('../models/user');
+const db = require('../db')
+const {DataTypes} = require('sequelize')
+const User = require('./../models/user')(db, DataTypes);
 
-router.post('/signup', (req, res) => {
-    User.create({
-        full_name: req.body.user.full_name,
-        username: req.body.user.username,
-        passwordhash: bcrypt.hashSync(req.body.user.password, 10),
-        email: req.body.user.email,
+router.post('/signup', async (req, res) => {
+  const {
+    full_name,
+    username,
+    password,
+    email
+  } = req.body.user;
+  try {
+    const passwordHash = await bcrypt.hashSync(password, 10);
+    const user = await User.create({
+      full_name,
+      username,
+      passwordHash,
+      email,
     })
-        .then(
-            function signupSuccess(user) {
-                let token = jwt.sign({ id: user.id }, 'lets_play_sum_games_man', { expiresIn: 60 * 60 * 24 });
-                res.status(200).json({
-                    user: user,
-                    token: token
-                })
-            },
-
-            function signupFail(err) {
-                res.status(500).send(err.message)
-            }
-        )
+    let token = jwt.sign({id: user.id}, process.env.SECRET_KEY, {expiresIn: 60 * 60 * 24});
+    res.status(200).json({
+      user: user,
+      token: token
+    })
+  } catch (err) {
+    res.status(500).send(err.message)
+  }
 })
 
-router.post('/signin', (req, res) => {
-    User.findOne({ where: { username: req.body.user.username } }).then(user => {
-        if (user) {
-            bcrypt.compare(req.body.user.password, user.passwordHash, function (err, matches) {
-                if (matches) {
-                    var token = jwt.sign({ id: user.id }, 'lets_play_sum_games_man', { expiresIn: 60 * 60 * 24 });
-                    res.json({
-                        user: user,
-                        message: "Successfully authenticated.",
-                        sessionToken: token
-                    });
-                } else {
-                    res.status(502).send({ error: "Passwords do not match." })
-                }
-            });
-        } else {
-            res.status(403).send({ error: "User not found." })
-        }
+router.post('/signin', async (req, res) => {
+  const {
+    username,
+    password,
+  } = req.body.user;
+  const user = await User.findOne({where: {username}})
+  if (!user) {
+    return res.status(403).send({error: "User not found."})
+  }
+  const matches = await bcrypt.compare(password, user.passwordHash)
+  if (!matches) {
+    return res.status(502).send({error: "Passwords do not match."})
+  }
+  const token = jwt.sign({id: user.id}, process.env.SECRET_KEY, {expiresIn: 60 * 60 * 24});
+  res.json({
+    user,
+    message: "Successfully authenticated.",
+    sessionToken: token
+  });
 
-    })
 })
 
 module.exports = router;
